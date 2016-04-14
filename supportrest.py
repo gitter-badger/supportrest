@@ -10,7 +10,6 @@ db = getenv("SD_DB")
 
 API_VERSION = '0.1'
 
-
 class DatabaseResource:
     def __enter__(self):
         class Database:
@@ -21,7 +20,7 @@ class DatabaseResource:
             def close(self):
                 self.conn.close()
                                         
-            def multi_row_fetch(self, query):
+            def multi_row_query(self, query):
                 self.cur.execute(query)
                 return self.cur.fetchall()
                 
@@ -33,18 +32,22 @@ class DatabaseResource:
             def __init__(self):
                 Database.__init__(self)
                             
-            def make_event(self, e, row):
+            def make_event(self, row):
                 event = {}
-                event['id'] = e
+                event_id = int(row['REFERENCE'])
+                event['id'] = event_id
                 event['owner'] = row['HANDLERTAG']
-                event['notes'] = self.get_event_notes(e)
+                event['subject'] = row['TITLE']
+                event['notes'] = self.get_event_notes(event_id)
+                return event
 
             def get_event_notes(self, e):
                 query = """
                 SELECT * FROM super.F0006_SUPREPLY
                 WHERE eventref LIKE '%%%u'
+                ORDER BY replyno
                 """ % e
-                rows = multi_row_fetch(query)
+                rows = self.multi_row_query(query)
                 notes = []
                 for row in rows:
                     note = {}
@@ -56,22 +59,26 @@ class DatabaseResource:
             def get_assigned_events(self, user):
                 query = """
                 SELECT * FROM super.F0006_SUPEVENT
-                WHERE respondent LIKE '%%%s'
+                WHERE handlertag LIKE '%%%s%%'
                 """ % user                
-                rows = multi_row_fetch(query)
-                            
+                rows = self.multi_row_query(query)
+                events = []
+                for row in rows:
+                    events.append(self.make_event(row)) 
+                return {"events" : events}
+
             def get_event(self, e):
                 query = """
                 SELECT * FROM super.F0006_SUPEVENT
                 WHERE reference LIKE '%%%u'
                 """ % e
-                row = single_row_query(query)
+                row = self.single_row_query(query)
                                 
                 if row is None:
                     return None
                 else:
                     # Stuff it all in a dictionary
-                    event = self.make_event(row, e)
+                    event = self.make_event(row)
                     return event
                     
         self.db = SDDatabase()
@@ -82,16 +89,23 @@ class DatabaseResource:
 
     def get_event(self, event):
         return self.db.get_event(event)
-        
+
+    def get_assigned_events(self, user):
+        return self.db.get_assigned_events(user)
+
 def get_url(suffix):
     return '/api/v%s/%s' % (API_VERSION, suffix)
 
 app = Flask(__name__)
 
+@app.route('/')
+def root():
+    return "SupportREST";
+
 @app.route(get_url('event/<int:event_id>'), methods=['GET'])
 def get_event(event_id):
     with DatabaseResource() as db:
-        event = ds.get_event(event_id)
+        event = db.get_event(event_id)
         if event is None:
             abort(404)
         else:
@@ -100,7 +114,7 @@ def get_event(event_id):
 @app.route(get_url('user/assigned/<string:user_id>'), methods=['GET'])
 def get_assigned_events(user_id):
     with DatabaseResource() as db:
-        events = ds.get_assigned_events(user_id)
+        events = db.get_assigned_events(user_id)
         if events is None:
             abort(404)
         else:
@@ -108,13 +122,7 @@ def get_assigned_events(user_id):
 
 @app.route(get_url('user/created/<string:user_id>'), methods=['GET'])
 def get_created_events(user_id):
-    with DatabaseResource() as db:
-        events = ds.get_created_events(user_id)
-        if events is None:
-            abort(404)
-        else:
-            return jsonify(events)
-
+    abort(404)
 
 if __name__ == '__main__':
     app.run(debug=True)
