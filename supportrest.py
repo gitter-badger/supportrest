@@ -3,10 +3,14 @@ from flask import Flask, jsonify
 import pymssql
 from os import getenv
 
-server = getenv("SD_SERVER")
-user = getenv("SD_USERNAME")
-password = getenv("SD_PASSWORD")
-db = getenv("SD_DB")
+#server = getenv("SD_SERVER")
+#user = getenv("SD_USERNAME")
+#password = getenv("SD_PASSWORD")
+#db = getenv("SD_DB")
+server = "supportdesk"
+user = "sduser"
+password = ""
+db = "supportdesk"
 
 API_VERSION = '0.1'
 
@@ -123,6 +127,10 @@ def get_assigned_events(user_id):
 @app.route(get_url('user/created/<string:user_id>'), methods=['GET'])
 def get_created_events(user_id):
     abort(404)
+
+@app.route(get_url('tom'))
+def tom():
+    return "tom is kewl"
 
 if __name__ == '__main__':
     app.run(debug=True)
